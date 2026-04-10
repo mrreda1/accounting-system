@@ -51,3 +51,22 @@ exports.getAccount = async (req, res) => {
     });
   }
 };
+
+exports.getLedgerInfo = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const result = await pool.query(
+      `SELECT * FROM transactions
+       WHERE account_code = $1
+       ORDER BY date ASC`,
+      [code],
+    );
+    res.status(200).json({
+      status: 'success',
+      results: result.rows.length,
+      data: result.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+};
