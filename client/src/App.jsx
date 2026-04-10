@@ -1,17 +1,16 @@
-import { useState } from 'react'
-import TrialBalance from './components/TrialBalance'
-import BalanceSheet from './components/BalanceSheet'
+import { useState } from 'react';
+import TrialBalance from './components/TrialBalance';
+import BalanceSheet from './components/BalanceSheet';
 
 function App() {
-  const [showBalanceSheet, setShowBalanceSheet] = useState(false)
+  const [showBalanceSheet, setShowBalanceSheet] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-5xl mx-auto">
-
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">
+          <h1 className="text-2xl font-bold text-gray-600">
             Accounting System
           </h1>
           <button
@@ -29,10 +28,9 @@ function App() {
         {showBalanceSheet && (
           <BalanceSheet onClose={() => setShowBalanceSheet(false)} />
         )}
-
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

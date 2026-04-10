@@ -20,7 +20,7 @@ function TrialBalance() {
 
   return (
     <div className="bg-white rounded-xl shadow p-6">
-      <h2 className="text-xl font-bold text-gray-700 mb-4">Trial Balance</h2>
+      <h2 className="text-2x font-bold text-gray-400 mb-3">Trial Balance</h2>
 
       <table className="w-full text-sm text-left">
         {/* Table Head */}
@@ -69,16 +69,16 @@ function TrialBalance() {
 
         {/* Totals Row */}
         <tfoot>
-          <tr className="font-bold text-gray-800">
-            <td colSpan={3} className="py-3">
+          <tr className="font-bold text-xl text-gray-600">
+            <td colSpan={3} className="py-4">
               Total
             </td>
-            <td className="py-3 text-right">
+            <td className="py-4 text-right">
               {formatNumber(
                 accounts.reduce((sum, a) => sum + parseFloat(a.total_debit), 0),
               )}
             </td>
-            <td className="py-3 text-right">
+            <td className="py-4 text-right">
               {formatNumber(
                 accounts.reduce(
                   (sum, a) => sum + parseFloat(a.total_credit),
