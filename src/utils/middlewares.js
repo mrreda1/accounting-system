@@ -2,12 +2,10 @@ const express = require('express');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
-const xss = require('xss-clean');
 const hpp = require('hpp');
 
 const setupMiddlewares = (app) => {
   app.use(helmet());
-  app.use(xss());
   app.use(
     hpp({
       whitelist: ['code', 'type', 'debit', 'credit'],
