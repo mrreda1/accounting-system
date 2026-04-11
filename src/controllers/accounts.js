@@ -70,3 +70,57 @@ exports.getLedgerInfo = async (req, res) => {
     res.status(500).json({ status: 'error', message: err.message });
   }
 };
+
+exports.addAccount = async (req, res) => {
+  const { code, name } = req.body;
+
+  if (!code || !name) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'code and name are required',
+    });
+  }
+
+  const type = inferType(code);
+
+  if (!type) {
+    return res.status(400).json({
+      status: 'fail',
+      message:
+        'Code must start with 1 (asset), 2 (liability), 3 (equity), 4 (revenue), or 5 (expense)',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO accounts (code, name, type)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [code, name, type],
+    );
+    res.status(201).json({
+      status: 'success',
+      data: result.rows[0],
+    });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(400).json({
+        status: 'fail',
+        message: `Account with code ${code} already exists`,
+      });
+    }
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
+function inferType(code) {
+  const prefix = String(code)[0];
+  const map = {
+    1: 'asset',
+    2: 'liability',
+    3: 'equity',
+    4: 'revenue',
+    5: 'expense',
+  };
+  return map[prefix] || null;
+}
