@@ -13,16 +13,16 @@ function App() {
           <h1 className="text-2xl font-bold text-gray-600">
             Accounting System
           </h1>
-          <button
-            onClick={() => setShowBalanceSheet(true)}
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            View Balance Sheet
-          </button>
         </div>
 
         {/* Trial Balance — always visible */}
         <TrialBalance />
+        <button
+          onClick={() => setShowBalanceSheet(true)}
+          className="bg-blue-600 text-white px-5 py-2 mt-6 rounded-lg hover:bg-blue-700 transition"
+        >
+          View Balance Sheet
+        </button>
 
         {/* Balance Sheet — popup */}
         {showBalanceSheet && (
