@@ -1,5 +1,40 @@
 const pool = require('../config/db');
 
+exports.getTransactions = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+        t.id,
+        t.account_code,
+        a.name AS account_name,
+        t.debit,
+        t.credit,
+        t.description,
+        t.date
+      FROM transactions t
+      LEFT JOIN accounts a ON a.code = t.account_code
+      ORDER BY t.date DESC, t.id DESC`,
+    );
+
+    const data = result.rows.map((row) => ({
+      ...row,
+      debit: parseFloat(row.debit),
+      credit: parseFloat(row.credit),
+    }));
+
+    res.status(200).json({
+      status: 'success',
+      results: data.length,
+      data,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      message: err.message,
+    });
+  }
+};
+
 exports.addTransaction = async (req, res) => {
   const { debitAccount, creditAccount, amount, description, date } = req.body;
 

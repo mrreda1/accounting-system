@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react';
-import { getTrialBalance, postAccount } from '../services/api';
+import { useEffect, useMemo, useState } from 'react';
+import { getTrialBalance } from '../services/api';
 import AccountLedger from './AccountLedger';
 import AddTransaction from './AddTransaction';
+import {
+  compareCode,
+  formatMoney,
+  getAccountLayer,
+  getNormalSide,
+} from '../utils/accounting';
 
 function TrialBalance() {
   const [accounts, setAccounts] = useState([]);
@@ -9,193 +15,156 @@ function TrialBalance() {
   const [error, setError] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [transactionAccount, setTransactionAccount] = useState(null);
-  const [addingAccount, setAddingAccount] = useState(false);
-  const [newAccount, setNewAccount] = useState({ code: '', name: '' });
+  const [expandedCodes, setExpandedCodes] = useState(() => new Set());
 
-  async function handleAddAccount() {
-    if (!newAccount.code || !newAccount.name) return;
+  async function loadTrialBalance() {
     try {
-      await postAccount(newAccount);
       const res = await getTrialBalance();
-      setAccounts(res.data.data);
-      setNewAccount({ code: '', name: '' });
-      setAddingAccount(false);
+      setAccounts([...res.data.data].sort(compareCode));
+      setError(null);
     } catch (err) {
-      alert(err.response?.data?.message || err.message);
+      setError(err.response?.data?.message || err.message);
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    getTrialBalance()
-      .then((res) => setAccounts(res.data.data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    loadTrialBalance();
   }, []);
 
-  if (loading) return <p className="text-gray-500">Loading...</p>;
-  if (error) return <p className="text-red-500">Error: {error}</p>;
+  const totals = useMemo(
+    () =>
+      accounts.reduce(
+        (acc, account) => {
+          acc.debit += Number(account.total_debit || 0);
+          acc.credit += Number(account.total_credit || 0);
+          return acc;
+        },
+        { debit: 0, credit: 0 },
+      ),
+    [accounts],
+  );
+
+  const { roots, expandableCodes } = useMemo(() => buildAccountTree(accounts), [accounts]);
+
+  useEffect(() => {
+    const defaults = new Set();
+    roots.forEach((root) => {
+      if (root.children.length > 0) {
+        defaults.add(root.code);
+      }
+    });
+    setExpandedCodes(defaults);
+  }, [roots]);
+
+  function toggleNode(code) {
+    setExpandedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
+  const rows = useMemo(() => {
+    return renderTrialRows({
+      nodes: roots,
+      depth: 0,
+      expandedCodes,
+      onToggle: toggleNode,
+      onSelectAccount: setSelectedAccount,
+      onPostTransaction: setTransactionAccount,
+    });
+  }, [roots, expandedCodes]);
+
+  if (loading) return <p className="text-sm text-slate-500">Loading trial sheet...</p>;
+  if (error) return <p className="text-sm text-rose-600">Error: {error}</p>;
 
   return (
-    <div className="bg-white rounded-xl shadow p-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-3">Trial Balance</h2>
-      <table className="w-full text-sm text-left">
-        <thead>
-          <tr className="border-b text-gray-700 uppercase text-xs">
-            <th className="py-3 pr-4">Code</th>
-            <th className="py-3 pr-4">Account</th>
-            <th className="py-3 pr-4">Type</th>
-            <th className="py-3 pr-4 text-right">Debit</th>
-            <th className="py-3 text-right">Credit</th>
-            <th className="py-3 text-right"></th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {accounts.map((account) => (
-            <tr
-              key={account.code}
-              onClick={() => setSelectedAccount(account)}
-              className="border-b hover:bg-blue-50 cursor-pointer transition"
+    <section className="space-y-5">
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Trial Sheet</h2>
+            <p className="text-sm text-slate-500">
+              Double-entry totals grouped by account IDs and account layers.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={loadTrialBalance}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-teal-500 hover:text-teal-700"
             >
-              <td className="py-3 pr-4 text-gray-600">{account.code}</td>
-              <td className="py-3 pr-4 font-medium text-gray-800">
-                {account.name}
-              </td>
-              <td className="py-3 pr-4">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${typeStyle(account.type)}`}
-                >
-                  {account.type}
-                </span>
-              </td>
-              <td className="py-3 pr-4 text-right text-gray-700">
-                {account.total_debit > 0
-                  ? formatNumber(account.total_debit)
-                  : '—'}
-              </td>
-              <td className="py-3 text-right text-gray-700">
-                {account.total_credit > 0
-                  ? formatNumber(account.total_credit)
-                  : '—'}
-              </td>
-
-              {/* + Button */}
-              <td className="py-3 text-right">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // prevents opening the ledger
-                    setTransactionAccount(account);
-                  }}
-                  className="text-blue-500 hover:text-white hover:bg-blue-500 border border-dashed border-blue-500 rounded w-8 h-6  items-center justify-center text-xs transition mx-3"
-                >
-                  +
-                </button>
-              </td>
-            </tr>
-          ))}
-          {/* Inline form row — shown when addingAccount is true */}
-          {addingAccount && (
-            <tr className="border-b bg-blue-50">
-              <td className="py-2 pr-4 w-32">
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="xxxx"
-                  value={newAccount.code}
-                  onChange={(e) =>
-                    setNewAccount({ ...newAccount, code: e.target.value })
-                  }
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-                />
-              </td>
-              <td className="py-2 pr-4">
-                <input
-                  type="text"
-                  placeholder="Account name"
-                  value={newAccount.name}
-                  onChange={(e) =>
-                    setNewAccount({ ...newAccount, name: e.target.value })
-                  }
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-                />
-              </td>
-              <td className="py-2 pr-4">
-                {/* Live type badge */}
-                {inferType(newAccount.code) ? (
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${typeStyle(inferType(newAccount.code))}`}
-                  >
-                    {inferType(newAccount.code)}
-                  </span>
-                ) : (
-                  <span className="text-gray-400 text-xs">type</span>
-                )}
-              </td>
-              <td className="py-2 pr-4" colSpan={1}></td>
-              <td className="py-2 text-right">
-                <div className="flex items-center justify-end">
-                  <button
-                    onClick={handleAddAccount}
-                    className="text-white bg-blue-600 hover:bg-blue-500 rounded px-3 py-1 text-xs transition"
-                  >
-                    Save
-                  </button>
-                </div>
-              </td>
-              <td className="py-2 text-right">
-                <div className="flex items-center justify-end  px-5">
-                  <button
-                    onClick={() => {
-                      setAddingAccount(false);
-                      setNewAccount({ code: '', name: '' });
-                    }}
-                    className="text-gray-400 hover:text-gray-600 text-s"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </td>
-            </tr>
-          )}
-
-          {/* Dashed add row */}
-          {!addingAccount && (
-            <tr
-              onClick={() => setAddingAccount(true)}
-              className="border-b border-dashed hover:bg-gray-50 cursor-pointer transition"
+              Refresh
+            </button>
+            <button
+              onClick={() => setExpandedCodes(new Set(expandableCodes))}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-teal-500 hover:text-teal-700"
             >
-              <td
-                colSpan={6}
-                className="py-3 text-center text-gray-400 text-sm hover:text-blue-500 transition"
-              >
-                + Add Account
-              </td>
-            </tr>
-          )}
-        </tbody>
+              Expand all
+            </button>
+            <button
+              onClick={() => setExpandedCodes(new Set())}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-rose-500 hover:text-rose-700"
+            >
+              Collapse all
+            </button>
+          </div>
+        </div>
 
-        <tfoot>
-          <tr className="font-bold text-lg text-gray-600">
-            <td colSpan={3} className="py-4">
-              Total
-            </td>
-            <td className="py-4 text-right">
-              {formatNumber(
-                accounts.reduce((sum, a) => sum + parseFloat(a.total_debit), 0),
+        <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3">ID</th>
+                <th className="px-4 py-3">Account</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Layer</th>
+                <th className="px-4 py-3">Normal Side</th>
+                <th className="px-4 py-3 text-right">Debit</th>
+                <th className="px-4 py-3 text-right">Credit</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {accounts.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                    No accounts found yet. Add accounts from the Accounts tab.
+                  </td>
+                </tr>
               )}
-            </td>
-            <td className="py-4 text-right">
-              {formatNumber(
-                accounts.reduce(
-                  (sum, a) => sum + parseFloat(a.total_credit),
-                  0,
-                ),
-              )}
-            </td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
+
+              {rows}
+            </tbody>
+
+            <tfoot>
+              <tr className="bg-slate-50 text-sm font-bold text-slate-800">
+                <td colSpan={5} className="px-4 py-3">
+                  Total
+                </td>
+                <td className="px-4 py-3 text-right">{formatMoney(totals.debit)}</td>
+                <td className="px-4 py-3 text-right">{formatMoney(totals.credit)}</td>
+                <td className="px-4 py-3"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div
+          className={`mt-4 rounded-xl border px-4 py-2 text-center text-sm font-semibold ${
+            Number(totals.debit.toFixed(2)) === Number(totals.credit.toFixed(2))
+              ? 'border-teal-200 bg-teal-50 text-teal-700'
+              : 'border-rose-200 bg-rose-50 text-rose-700'
+          }`}
+        >
+          {Number(totals.debit.toFixed(2)) === Number(totals.credit.toFixed(2))
+            ? 'Trial sheet is balanced'
+            : 'Trial sheet is not balanced'}
+        </div>
+      </div>
 
       {selectedAccount && (
         <AccountLedger
@@ -209,46 +178,173 @@ function TrialBalance() {
           accounts={accounts}
           prefilledAccount={transactionAccount}
           onClose={() => setTransactionAccount(null)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setTransactionAccount(null);
-            // refresh the trial balance
-            getTrialBalance().then((res) => setAccounts(res.data.data));
+            await loadTrialBalance();
           }}
         />
       )}
-    </div>
+    </section>
   );
 }
 
-// Color badge per account type
-function typeStyle(type) {
-  const styles = {
-    asset: 'bg-green-100 text-green-700',
-    liability: 'bg-red-100 text-red-700',
-    equity: 'bg-purple-100 text-purple-700',
-    revenue: 'bg-blue-100 text-blue-700',
-    expense: 'bg-orange-100 text-orange-700',
-  };
-  return styles[type] || 'bg-gray-100 text-gray-600';
+function renderTrialRows({
+  nodes,
+  depth,
+  expandedCodes,
+  onToggle,
+  onSelectAccount,
+  onPostTransaction,
+}) {
+  const rows = [];
+
+  nodes.forEach((account) => {
+    const hasChildren = account.children.length > 0;
+    const isExpanded = expandedCodes.has(account.code);
+
+    rows.push(
+      <tr
+        key={account.code}
+        onClick={() => onSelectAccount(account)}
+        className="cursor-pointer border-b border-slate-100 text-slate-700 transition hover:bg-slate-50/80"
+      >
+        <td className="px-4 py-3 font-mono text-xs text-slate-500">{account.code}</td>
+        <td className="px-4 py-3 font-medium text-slate-800">
+          <div className="flex items-center gap-2" style={{ paddingInlineStart: `${depth * 1.2}rem` }}>
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle(account.code);
+                }}
+                className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-300 bg-white text-xs text-slate-600 transition hover:border-teal-500 hover:text-teal-700"
+                aria-label={isExpanded ? 'Collapse layer' : 'Expand layer'}
+                title={isExpanded ? 'Collapse layer' : 'Expand layer'}
+              >
+                {isExpanded ? '▾' : '▸'}
+              </button>
+            ) : (
+              <span className="inline-block h-5 w-5" />
+            )}
+            <span dir="auto" className="leading-6">{account.name}</span>
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${typeStyle(account.type)}`}>
+            {account.type}
+          </span>
+        </td>
+        <td className="px-4 py-3">Layer {getAccountLayer(account.code)}</td>
+        <td className="px-4 py-3">{getNormalSide(account.type)}</td>
+        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+          {Number(account.total_debit) > 0 ? formatMoney(account.total_debit) : '-'}
+        </td>
+        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+          {Number(account.total_credit) > 0 ? formatMoney(account.total_credit) : '-'}
+        </td>
+        <td className="px-4 py-3 text-right">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPostTransaction(account);
+            }}
+            className="rounded-lg border border-dashed border-teal-500 px-2 py-1 text-xs font-semibold text-teal-600 transition hover:bg-teal-500 hover:text-white"
+          >
+            + Post
+          </button>
+        </td>
+      </tr>,
+    );
+
+    if (hasChildren && isExpanded) {
+      rows.push(
+        ...renderTrialRows({
+          nodes: account.children,
+          depth: depth + 1,
+          expandedCodes,
+          onToggle,
+          onSelectAccount,
+          onPostTransaction,
+        }),
+      );
+    }
+  });
+
+  return rows;
 }
 
-// Format numbers as currency
-function formatNumber(value) {
-  return parseFloat(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+function buildAccountTree(accounts) {
+  const nodesByCode = new Map();
+
+  accounts.forEach((account) => {
+    const code = String(account.code);
+    nodesByCode.set(code, {
+      ...account,
+      code,
+      children: [],
+    });
+  });
+
+  const roots = [];
+
+  nodesByCode.forEach((node) => {
+    const parentCode = getParentCode(node.code);
+    const parent = parentCode ? nodesByCode.get(parentCode) : null;
+
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  sortNodesByCode(roots);
+
+  const expandableCodes = [];
+  collectExpandableCodes(roots, expandableCodes);
+
+  return { roots, expandableCodes };
+}
+
+function collectExpandableCodes(nodes, result) {
+  nodes.forEach((node) => {
+    if (node.children.length > 0) {
+      result.push(node.code);
+      collectExpandableCodes(node.children, result);
+    }
   });
 }
 
-function inferType(code) {
-  const map = {
-    1: 'asset',
-    2: 'liability',
-    3: 'equity',
-    4: 'revenue',
-    5: 'expense',
+function sortNodesByCode(nodes) {
+  nodes.sort(compareCode);
+  nodes.forEach((node) => {
+    if (node.children.length > 0) {
+      sortNodesByCode(node.children);
+    }
+  });
+}
+
+function getParentCode(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+
+  if (digits.length <= 1) return null;
+  if (digits.length <= 3) return digits.slice(0, 1);
+  if (digits.length <= 6) return digits.slice(0, 3);
+  if (digits.length <= 9) return digits.slice(0, 6);
+
+  return digits.slice(0, 9);
+}
+
+function typeStyle(type) {
+  const styles = {
+    asset: 'bg-teal-100 text-teal-700',
+    liability: 'bg-amber-100 text-amber-700',
+    equity: 'bg-orange-100 text-orange-700',
+    revenue: 'bg-cyan-100 text-cyan-700',
+    expense: 'bg-rose-100 text-rose-700',
   };
-  return map[String(code)[0]] || null;
+  return styles[type] || 'bg-slate-100 text-slate-600';
 }
 
 export default TrialBalance;

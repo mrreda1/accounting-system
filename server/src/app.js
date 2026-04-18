@@ -1,5 +1,6 @@
 const AppError = require('./utils/appError');
 const setupMiddlewares = require('./utils/middlewares.js');
+const db = require('./config/db');
 
 require('dotenv').config();
 const express = require('express');
@@ -21,8 +22,18 @@ app.use(`/api/v${APIVersion}/balance-sheet`, balanceSheetRouter);
 app.use(`/api/v${APIVersion}/trial-balance`, trialBalanceRouter);
 app.use(`/api/v${APIVersion}/transactions`, transactionsRouter);
 
-const server = app.listen(PORT, () => {
-	console.log(`App running on port ${PORT}...`);
-});
+const startServer = async () => {
+	try {
+		await db.initializeDatabase();
+		app.listen(PORT, () => {
+			console.log(`App running on port ${PORT}...`);
+		});
+	} catch (err) {
+		console.error('Failed to connect to PostgreSQL:', err.message);
+		process.exit(1);
+	}
+};
+
+startServer();
 
 module.exports = app;
