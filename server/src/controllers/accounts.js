@@ -1,5 +1,32 @@
 const pool = require('../config/db');
 
+exports.getAccounts = async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM accounts ORDER BY code`);
+    const accounts = result.rows;
+
+    const map = {};
+    const roots = [];
+
+    accounts.forEach((a) => (map[a.code] = { ...a, sub_accounts: [] }));
+
+    accounts.forEach((a) => {
+      if (a.parent_code && map[a.parent_code]) {
+        map[a.parent_code].sub_accounts.push(map[a.code]);
+      } else {
+        roots.push(map[a.code]);
+      }
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: { accounts: roots },
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
 exports.getAccount = async (req, res) => {
   try {
     const { code } = req.params;
@@ -15,33 +42,10 @@ exports.getAccount = async (req, res) => {
       });
     }
 
-    const transactions = await pool.query(
-      `SELECT id, debit, credit, description, date::text
-       FROM transactions
-       WHERE account_code = $1
-       ORDER BY date ASC`,
-      [code],
-    );
-
-    let runningBalance = 0;
-    const ledger = transactions.rows.map((tx) => {
-      runningBalance += parseFloat(tx.debit) - parseFloat(tx.credit);
-      return {
-        id: tx.id,
-        date: tx.date,
-        description: tx.description,
-        debit: parseFloat(tx.debit),
-        credit: parseFloat(tx.credit),
-        balance: runningBalance,
-      };
-    });
-
     res.status(200).json({
       status: 'success',
       data: {
         account: account.rows[0],
-        ledger,
-        finalBalance: runningBalance,
       },
     });
   } catch (err) {
@@ -49,25 +53,6 @@ exports.getAccount = async (req, res) => {
       status: 'error',
       message: err.message,
     });
-  }
-};
-
-exports.getLedgerInfo = async (req, res) => {
-  try {
-    const { code } = req.params;
-    const result = await pool.query(
-      `SELECT * FROM transactions
-       WHERE account_code = $1
-       ORDER BY date ASC`,
-      [code],
-    );
-    res.status(200).json({
-      status: 'success',
-      results: result.rows.length,
-      data: result.rows,
-    });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
   }
 };
 
@@ -81,22 +66,43 @@ exports.addAccount = async (req, res) => {
     });
   }
 
-  const type = inferType(code);
+  if (!isValidCode(code)) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'Code length must be 1, 3, 6, or 9 digits',
+    });
+  }
 
+  const type = inferType(code);
   if (!type) {
     return res.status(400).json({
       status: 'fail',
       message:
-        'Code must start with 1 (asset), 2 (liability), 3 (equity), 4 (revenue), or 5 (expense)',
+        'Code must start with 1 (asset), 2 (liability and equity), 3 (expense), 4 (revenue)',
     });
+  }
+
+  const parentCode = getParentCode(code);
+
+  if (parentCode) {
+    const parent = await pool.query(
+      `SELECT code FROM accounts WHERE code = $1`,
+      [parentCode],
+    );
+    if (parent.rows.length === 0) {
+      return res.status(400).json({
+        status: 'fail',
+        message: `Parent account ${parentCode} does not exist — create it first`,
+      });
+    }
   }
 
   try {
     const result = await pool.query(
-      `INSERT INTO accounts (code, name, type)
-       VALUES ($1, $2, $3)
+      `INSERT INTO accounts (code, name, type, parent_code)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [code, name, type],
+      [code, name, type, parentCode],
     );
     res.status(201).json({
       status: 'success',
@@ -117,10 +123,22 @@ function inferType(code) {
   const prefix = String(code)[0];
   const map = {
     1: 'asset',
-    2: 'liability',
-    3: 'equity',
+    2: 'liability and equity',
+    3: 'expense',
     4: 'revenue',
-    5: 'expense',
   };
   return map[prefix] || null;
+}
+
+function getParentCode(code) {
+  const len = String(code).length;
+
+  if (len === 1) return null;
+  if (len === 3) return String(code).slice(0, 1);
+  return String(code).slice(0, len - 3);
+}
+
+function isValidCode(code) {
+  const len = String(code).length;
+  return [1, 3, 6, 9].includes(len);
 }
