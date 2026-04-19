@@ -4,5 +4,6 @@ const router = express.Router();
 
 router.get('/', getTransactions);
 router.post('/', addTransaction);
+router.get('/', getTransactions);
 
 module.exports = router;
