@@ -2,52 +2,92 @@ const pool = require('../config/db');
 
 exports.getBalanceSheet = async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        a.code,
-        a.name,
-        a.type,
-        COALESCE(SUM(t.debit), 0)  AS total_debit,
-        COALESCE(SUM(t.credit), 0) AS total_credit
-      FROM accounts a
-      LEFT JOIN transactions t ON a.code = t.account_code
-      WHERE a.type IN ('asset', 'liability', 'equity')
-      GROUP BY a.code, a.name, a.type
-      ORDER BY a.code
+    const accountsResult = await pool.query(`
+      SELECT code, name, type, opening_debit, opening_credit
+      FROM accounts
+      WHERE type IN ('asset', 'liability and equity')
+      ORDER BY code
     `);
+
+    const movementsResult = await pool.query(`
+      SELECT account_code_debit AS code, SUM(amount) AS debit, 0 AS credit
+      FROM transactions
+      GROUP BY account_code_debit
+
+      UNION ALL
+
+      SELECT account_code_credit AS code, 0 AS debit, SUM(amount) AS credit
+      FROM transactions
+      GROUP BY account_code_credit
+    `);
+
+    const movements = {};
+    movementsResult.rows.forEach((row) => {
+      if (!movements[row.code]) {
+        movements[row.code] = { debit: 0, credit: 0 };
+      }
+      movements[row.code].debit += parseFloat(row.debit);
+      movements[row.code].credit += parseFloat(row.credit);
+    });
 
     const netIncomeResult = await pool.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN a.type = 'revenue' THEN t.credit - t.debit ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN a.type = 'expense' THEN t.debit - t.credit ELSE 0 END), 0) AS net_income
-      FROM accounts a
-      LEFT JOIN transactions t ON a.code = t.account_code
+        -- revenue: credit side minus debit side
+        COALESCE((
+          SELECT SUM(amount) FROM transactions t
+          JOIN accounts a ON t.account_code_credit = a.code
+          WHERE a.type = 'revenue'
+        ), 0) -
+        COALESCE((
+          SELECT SUM(amount) FROM transactions t
+          JOIN accounts a ON t.account_code_debit = a.code
+          WHERE a.type = 'revenue'
+        ), 0) -
+        -- expense: debit side minus credit side
+        COALESCE((
+          SELECT SUM(amount) FROM transactions t
+          JOIN accounts a ON t.account_code_debit = a.code
+          WHERE a.type = 'expense'
+        ), 0) +
+        COALESCE((
+          SELECT SUM(amount) FROM transactions t
+          JOIN accounts a ON t.account_code_credit = a.code
+          WHERE a.type = 'expense'
+        ), 0) AS net_income
     `);
 
     const netIncome = parseFloat(netIncomeResult.rows[0].net_income);
 
-    const assets = result.rows
-      .filter((row) => row.type === 'asset')
-      .map((row) => ({
-        code: row.code,
-        name: row.name,
-        balance: parseFloat(row.total_debit) - parseFloat(row.total_credit),
-      }));
+    const assets = [];
+    const liabilitiesAndEquity = [];
 
-    const liabilitiesAndEquity = result.rows
-      .filter((row) => row.type === 'liability' || row.type === 'equity')
-      .map((row) => ({
-        code: row.code,
-        name: row.name,
-        balance: parseFloat(row.total_credit) - parseFloat(row.total_debit),
-      }));
+    accountsResult.rows.forEach((account) => {
+      const mov = movements[account.code] || { debit: 0, credit: 0 };
+
+      const totalDebit = parseFloat(account.opening_debit) + mov.debit;
+      const totalCredit = parseFloat(account.opening_credit) + mov.credit;
+
+      const entry = {
+        code: account.code,
+        name: account.name,
+        balance:
+          account.type === 'asset'
+            ? totalDebit - totalCredit
+            : totalCredit - totalDebit,
+      };
+
+      if (account.type === 'asset') {
+        assets.push(entry);
+      } else {
+        liabilitiesAndEquity.push(entry);
+      }
+    });
 
     const totalAssets = assets.reduce((sum, a) => sum + a.balance, 0);
     const totalLiabilitiesAndEquity = liabilitiesAndEquity.reduce(
       (sum, a) => sum + a.balance,
       0,
     );
-
     const totalEquitySide = totalLiabilitiesAndEquity + netIncome;
 
     res.status(200).json({
@@ -58,7 +98,7 @@ exports.getBalanceSheet = async (req, res) => {
         netIncome,
         totalAssets,
         totalLiabilitiesAndEquity: totalEquitySide,
-        balanced: totalAssets === totalEquitySide,
+        balanced: Math.abs(totalAssets - totalEquitySide) < 0.01,
       },
     });
   } catch (err) {
