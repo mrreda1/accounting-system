@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getTrialBalance, postAccount } from '../services/api';
 import {
   compareCode,
+  flattenAccountTree,
   formatMoney,
   getAccountLayer,
   getNormalSide,
@@ -18,7 +19,9 @@ function AccountsTab() {
   async function loadAccounts() {
     try {
       const res = await getTrialBalance();
-      setAccounts([...res.data.data].sort(compareCode));
+      const roots = res.data.data || [];
+      const flatAccounts = flattenAccountTree(roots).sort(compareCode);
+      setAccounts(flatAccounts);
       setError(null);
     } catch (err) {
       setError(err.response?.data?.message || err.message);
@@ -37,12 +40,12 @@ function AccountsTab() {
   );
 
   const liabilitiesAndEquity = useMemo(
-    () => accounts.filter((account) => account.type === 'liability' || account.type === 'equity'),
+    () => accounts.filter((account) => account.type === 'liability and equity'),
     [accounts],
   );
 
   const otherAccounts = useMemo(
-    () => accounts.filter((account) => !['asset', 'liability', 'equity'].includes(account.type)),
+    () => accounts.filter((account) => !['asset', 'liability and equity'].includes(account.type)),
     [accounts],
   );
 
@@ -109,7 +112,7 @@ function AccountsTab() {
           <div className="text-xs text-slate-500 md:col-span-3">
             {inferredType
               ? `Type from code prefix: ${inferredType}`
-              : 'Type will be inferred from first digit (1-5).'}
+              : 'Type will be inferred from first digit (1-4).'}
           </div>
         </form>
 
@@ -147,7 +150,12 @@ function AccountsTab() {
   );
 }
 
-function AccountLayerTree({ title, subtitle, accounts, accent }) {
+function AccountLayerTree({
+  title,
+  subtitle,
+  accounts,
+  accent,
+}) {
   const accentMap = {
     teal: 'from-teal-500/15 to-cyan-500/10 border-teal-200',
     amber: 'from-amber-500/15 to-orange-500/10 border-amber-200',
@@ -236,7 +244,12 @@ function AccountLayerTree({ title, subtitle, accounts, accent }) {
   );
 }
 
-function renderTreeRows({ nodes, depth, expandedCodes, onToggle }) {
+function renderTreeRows({
+  nodes,
+  depth,
+  expandedCodes,
+  onToggle,
+}) {
   const rows = [];
 
   nodes.forEach((account) => {

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import TrialBalance from './components/TrialBalance';
 import BalanceSheet from './components/BalanceSheet';
+import IncomeStatement from './components/IncomeStatement';
 import TransactionsTab from './components/TransactionsTab';
 import AccountsTab from './components/AccountsTab';
 
 function App() {
   const tabs = [
     { id: 'accounts', label: 'Accounts' },
+    { id: 'income-statement', label: 'Income Statement' },
     { id: 'balance-sheet', label: 'Balance Sheet' },
     { id: 'transactions', label: 'Transactions' },
     { id: 'trial-sheet', label: 'Trial Sheet' },
@@ -15,6 +17,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('accounts');
 
   function renderActiveTab() {
+    if (activeTab === 'income-statement') return <IncomeStatement />;
     if (activeTab === 'balance-sheet') return <BalanceSheet />;
     if (activeTab === 'transactions') return <TransactionsTab />;
     if (activeTab === 'trial-sheet') return <TrialBalance />;
@@ -37,7 +40,7 @@ function App() {
         </header>
 
         <nav className="rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-sm backdrop-blur">
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {tabs.map((tab) => (
               <li key={tab.id}>
                 <button

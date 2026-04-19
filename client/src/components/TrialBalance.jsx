@@ -4,6 +4,7 @@ import AccountLedger from './AccountLedger';
 import AddTransaction from './AddTransaction';
 import {
   compareCode,
+  flattenAccountTree,
   formatMoney,
   getAccountLayer,
   getNormalSide,
@@ -11,6 +12,7 @@ import {
 
 function TrialBalance() {
   const [accounts, setAccounts] = useState([]);
+  const [rootAccounts, setRootAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
@@ -20,7 +22,9 @@ function TrialBalance() {
   async function loadTrialBalance() {
     try {
       const res = await getTrialBalance();
-      setAccounts([...res.data.data].sort(compareCode));
+      const roots = res.data.data || [];
+      setRootAccounts(roots);
+      setAccounts(flattenAccountTree(roots).sort(compareCode));
       setError(null);
     } catch (err) {
       setError(err.response?.data?.message || err.message);
@@ -35,7 +39,7 @@ function TrialBalance() {
 
   const totals = useMemo(
     () =>
-      accounts.reduce(
+      rootAccounts.reduce(
         (acc, account) => {
           acc.debit += Number(account.total_debit || 0);
           acc.credit += Number(account.total_credit || 0);
@@ -43,7 +47,7 @@ function TrialBalance() {
         },
         { debit: 0, credit: 0 },
       ),
-    [accounts],
+    [rootAccounts],
   );
 
   const { roots, expandableCodes } = useMemo(() => buildAccountTree(accounts), [accounts]);
@@ -339,8 +343,7 @@ function getParentCode(code) {
 function typeStyle(type) {
   const styles = {
     asset: 'bg-teal-100 text-teal-700',
-    liability: 'bg-amber-100 text-amber-700',
-    equity: 'bg-orange-100 text-orange-700',
+    'liability and equity': 'bg-amber-100 text-amber-700',
     revenue: 'bg-cyan-100 text-cyan-700',
     expense: 'bg-rose-100 text-rose-700',
   };

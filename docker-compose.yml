@@ -18,5 +18,52 @@ services:
       timeout: 5s
       retries: 12
 
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: accounting-server
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      API_VERSION: 1
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: accounting_system
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_SSL: "false"
+      DB_POOL_MAX: 10
+      DB_IDLE_TIMEOUT_MS: 30000
+      DB_CONNECTION_TIMEOUT_MS: 5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4001:4000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: accounting-client
+    restart: unless-stopped
+    environment:
+      VITE_API_TARGET: http://server:4000
+      CHOKIDAR_USEPOLLING: "true"
+    depends_on:
+      server:
+        condition: service_started
+    ports:
+      - "5174:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+
 volumes:
   pg_data:

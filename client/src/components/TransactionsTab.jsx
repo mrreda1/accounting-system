@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getTransactions, getTrialBalance } from '../services/api';
+import {
+  getTransactions,
+  getTrialBalance,
+} from '../services/api';
 import AddTransaction from './AddTransaction';
-import { compareCode, formatMoney, getAccountLayer } from '../utils/accounting';
+import {
+  compareCode,
+  flattenAccountTree,
+  formatMoney,
+  getAccountLayer,
+} from '../utils/accounting';
 
 function TransactionsTab() {
   const [accounts, setAccounts] = useState([]);
@@ -17,7 +25,8 @@ function TransactionsTab() {
         getTransactions(),
       ]);
 
-      setAccounts([...accountsRes.data.data].sort(compareCode));
+      const roots = accountsRes.data.data || [];
+      setAccounts(flattenAccountTree(roots).sort(compareCode));
       setTransactions(transactionsRes.data.data);
       setError(null);
     } catch (err) {
@@ -34,12 +43,31 @@ function TransactionsTab() {
   const totals = useMemo(() => {
     return transactions.reduce(
       (acc, transaction) => {
-        acc.debit += Number(transaction.debit || 0);
-        acc.credit += Number(transaction.credit || 0);
+        const amount = Number(transaction.amount || 0);
+        acc.debit += amount;
+        acc.credit += amount;
         return acc;
       },
       { debit: 0, credit: 0 },
     );
+  }, [transactions]);
+
+  const groupedTransactions = useMemo(() => {
+    let lastJournalNo = null;
+    let groupIndex = -1;
+
+    return transactions.map((transaction, index) => {
+      const currentJournalNo = transaction.journal_no ?? `legacy-${index}`;
+      if (currentJournalNo !== lastJournalNo) {
+        groupIndex += 1;
+        lastJournalNo = currentJournalNo;
+      }
+
+      return {
+        ...transaction,
+        groupIndex,
+      };
+    });
   }, [transactions]);
 
   return (
@@ -85,13 +113,13 @@ function TransactionsTab() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3">Journal No</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Account ID</th>
-                <th className="px-4 py-3">Account</th>
-                <th className="px-4 py-3">Layer</th>
-                <th className="px-4 py-3">Side</th>
-                <th className="px-4 py-3 text-right">Debit</th>
-                <th className="px-4 py-3 text-right">Credit</th>
+                <th className="px-4 py-3">Debit Account</th>
+                <th className="px-4 py-3">Credit Account</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3">Cost Centre</th>
+                <th className="px-4 py-3">Numerical</th>
                 <th className="px-4 py-3">Description</th>
               </tr>
             </thead>
@@ -104,34 +132,45 @@ function TransactionsTab() {
                 </tr>
               )}
 
-              {transactions.map((transaction) => {
-                const side = transaction.debit > 0 ? 'Debit' : 'Credit';
+              {groupedTransactions.map((transaction) => {
+                const groupBackground =
+                  transaction.groupIndex % 2 === 0 ? 'bg-white' : 'bg-amber-50/35';
 
                 return (
-                  <tr key={transaction.id} className="border-b border-slate-100 text-slate-700 hover:bg-slate-50/70">
+                  <tr key={transaction.id} className={`border-b border-slate-100 text-slate-700 hover:bg-teal-50/40 ${groupBackground}`}>
+                    <td className="px-4 py-3 text-xs font-semibold text-slate-700">
+                      {transaction.journal_no || '-'}
+                    </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
                       {new Date(transaction.date).toLocaleDateString('en-US')}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{transaction.account_code}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{transaction.account_name || '-'}</td>
-                    <td className="px-4 py-3">Layer {getAccountLayer(transaction.account_code)}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                          side === 'Debit'
-                            ? 'bg-teal-100 text-teal-700'
-                            : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        {side}
-                      </span>
+                      <div className="font-mono text-xs text-slate-500">
+                        {transaction.account_code_debit}
+                      </div>
+                      <div className="font-medium text-slate-800">
+                        {transaction.account_name_debit || '-'}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Layer {getAccountLayer(transaction.account_code_debit)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-mono text-xs text-slate-500">
+                        {transaction.account_code_credit}
+                      </div>
+                      <div className="font-medium text-slate-800">
+                        {transaction.account_name_credit || '-'}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Layer {getAccountLayer(transaction.account_code_credit)}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                      {transaction.debit > 0 ? formatMoney(transaction.debit) : '-'}
+                      {formatMoney(transaction.amount)}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                      {transaction.credit > 0 ? formatMoney(transaction.credit) : '-'}
-                    </td>
+                    <td className="px-4 py-3 text-slate-600">{transaction.cost_centre || '-'}</td>
+                    <td className="px-4 py-3 text-slate-600">{transaction.numerical || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{transaction.description || '-'}</td>
                   </tr>
                 );

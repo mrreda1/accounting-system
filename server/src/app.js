@@ -14,11 +14,13 @@ const PORT = process.env.PORT || 3000;
 
 const accountsRouter = require('./routes/accounts');
 const balanceSheetRouter = require('./routes/balanceSheet');
+const incomeStatementRouter = require('./routes/incomeStatement');
 const trialBalanceRouter = require('./routes/trialBalance');
 const transactionsRouter = require('./routes/transactions');
 
 app.use(`/api/v${APIVersion}/accounts`, accountsRouter);
 app.use(`/api/v${APIVersion}/balance-sheet`, balanceSheetRouter);
+app.use(`/api/v${APIVersion}/income-statement`, incomeStatementRouter);
 app.use(`/api/v${APIVersion}/trial-balance`, trialBalanceRouter);
 app.use(`/api/v${APIVersion}/transactions`, transactionsRouter);
 

@@ -8,10 +8,9 @@ export function formatMoney(value) {
 export function inferTypeFromCode(code) {
   const map = {
     1: 'asset',
-    2: 'liability',
-    3: 'equity',
+    2: 'liability and equity',
+    3: 'expense',
     4: 'revenue',
-    5: 'expense',
   };
 
   return map[String(code || '')[0]] || null;
@@ -19,7 +18,7 @@ export function inferTypeFromCode(code) {
 
 export function getNormalSide(type) {
   if (type === 'asset' || type === 'expense') return 'Debit';
-  if (type === 'liability' || type === 'equity' || type === 'revenue') return 'Credit';
+  if (type === 'liability and equity' || type === 'revenue') return 'Credit';
   return 'N/A';
 }
 
@@ -40,4 +39,17 @@ export function compareCode(a, b) {
     numeric: true,
     sensitivity: 'base',
   });
+}
+
+export function flattenAccountTree(nodes = []) {
+  const result = [];
+
+  const walk = (node) => {
+    result.push(node);
+    const children = node.children || node.sub_accounts || [];
+    children.forEach(walk);
+  };
+
+  nodes.forEach(walk);
+  return result;
 }

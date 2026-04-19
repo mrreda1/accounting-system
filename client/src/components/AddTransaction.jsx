@@ -26,11 +26,23 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
     [classifiedAccounts],
   );
 
+  const debitMap = useMemo(
+    () => new Map(debitAccounts.map((account) => [String(account.code), account])),
+    [debitAccounts],
+  );
+
+  const creditMap = useMemo(
+    () => new Map(creditAccounts.map((account) => [String(account.code), account])),
+    [creditAccounts],
+  );
+
   const [form, setForm] = useState({
     debitAccount: '',
     creditAccount: '',
     amount: '',
     description: '',
+    costCentre: '',
+    numerical: '',
     date: new Date().toISOString().split('T')[0],
   });
 
@@ -89,7 +101,24 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
   }, [debitAccounts, creditAccounts, prefilledAccount]);
 
   function handleChange(e) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+
+    setForm((prev) => {
+      const nextValue =
+        name === 'debitAccount' || name === 'creditAccount' ? value.trim() : value;
+
+      const next = { ...prev, [name]: nextValue };
+
+      if (
+        name === 'debitAccount' &&
+        next.creditAccount &&
+        String(next.creditAccount) === String(nextValue)
+      ) {
+        next.creditAccount = '';
+      }
+
+      return next;
+    });
   }
 
   async function handleSubmit() {
@@ -122,10 +151,12 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
 
     try {
       await postTransaction({
-        debitAccount: form.debitAccount,
-        creditAccount: form.creditAccount,
+        account_code_debit: form.debitAccount,
+        account_code_credit: form.creditAccount,
         amount,
         description: form.description,
+        cost_centre: form.costCentre,
+        numerical: form.numerical,
         date: form.date,
       });
       onSuccess();
@@ -136,9 +167,12 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
     }
   }
 
+  const selectedDebit = debitMap.get(String(form.debitAccount));
+  const selectedCredit = creditMap.get(String(form.creditAccount));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
         <button
           onClick={onClose}
           className="absolute right-5 top-4 text-2xl text-slate-400 transition hover:text-slate-700"
@@ -149,54 +183,82 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
 
         <h2 className="mb-1 text-xl font-bold text-slate-900">Add Transaction</h2>
         <p className="mb-6 text-sm text-slate-500">
-          Create a double-entry journal transaction.
+          Create a double-entry journal transaction. Journal No is assigned automatically.
         </p>
 
-        <div className="space-y-4">
-          <div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Debit Account (Debit side only)
+              Debit Account Code (Debit side only)
             </label>
-            <select
+            <input
+              type="text"
+              list="debit-account-codes"
               name="debitAccount"
               value={form.debitAccount}
               onChange={handleChange}
+              placeholder="Type code (example: 101001001)"
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-teal-500"
-            >
-              {debitAccounts.length === 0 && (
-                <option value="">No debit-side accounts available</option>
-              )}
-              {debitAccounts.map((account) => (
-                <option key={account.code} value={account.code}>
-                  {account.code} - {account.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Debit Account Name</label>
+            <input
+              type="text"
+              value={selectedDebit?.name || ''}
+              readOnly
+              placeholder="Auto from code"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Type of Account</label>
+            <input
+              type="text"
+              value={selectedDebit?.resolvedType || selectedDebit?.type || ''}
+              readOnly
+              placeholder="Auto from code"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
+          </div>
+
+          <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Credit Account (Credit side only)
+              Credit Account Code (Credit side only)
             </label>
-            <select
+            <input
+              type="text"
+              list="credit-account-codes"
               name="creditAccount"
               value={form.creditAccount}
               onChange={handleChange}
+              placeholder="Type code (example: 201001)"
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-teal-500"
-            >
-              {creditAccounts.length === 0 ? (
-                <option value="">No credit-side accounts available</option>
-              ) : (
-                <option value="">Select account...</option>
-              )}
-              {creditAccounts
-                .filter((account) => String(account.code) !== String(form.debitAccount))
-                .map((account) => (
-                  <option key={account.code} value={account.code}>
-                    {account.code} - {account.name}
-                  </option>
-                ))}
-            </select>
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Credit Account Name</label>
+            <input
+              type="text"
+              value={selectedCredit?.name || ''}
+              readOnly
+              placeholder="Auto from code"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Type of Account</label>
+            <input
+              type="text"
+              value={selectedCredit?.resolvedType || selectedCredit?.type || ''}
+              readOnly
+              placeholder="Auto from code"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            />
           </div>
 
           <div>
@@ -212,6 +274,30 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
           </div>
 
           <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Cost Centre</label>
+            <input
+              type="text"
+              name="costCentre"
+              value={form.costCentre}
+              onChange={handleChange}
+              placeholder="Optional"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Numerical</label>
+            <input
+              type="text"
+              name="numerical"
+              value={form.numerical}
+              onChange={handleChange}
+              placeholder="Invoice number (optional)"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+            />
+          </div>
+
+          <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Description
             </label>
@@ -225,7 +311,7 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
             />
           </div>
 
-          <div>
+          <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium text-slate-700">Date</label>
             <input
               type="date"
@@ -236,12 +322,28 @@ function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess })
             />
           </div>
 
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+          <datalist id="debit-account-codes">
+            {debitAccounts.map((account) => (
+              <option key={account.code} value={account.code}>
+                {account.name}
+              </option>
+            ))}
+          </datalist>
+
+          <datalist id="credit-account-codes">
+            {creditAccounts.map((account) => (
+              <option key={account.code} value={account.code}>
+                {account.name}
+              </option>
+            ))}
+          </datalist>
+
+          {error && <p className="text-sm text-rose-600 md:col-span-2">{error}</p>}
 
           <button
             onClick={handleSubmit}
             disabled={loading || debitAccounts.length === 0 || creditAccounts.length === 0}
-            className="w-full rounded-xl bg-slate-900 py-2.5 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-xl bg-slate-900 py-2.5 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 md:col-span-2"
           >
             {loading ? 'Saving...' : 'Save Transaction'}
           </button>
