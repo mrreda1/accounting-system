@@ -1,11 +1,14 @@
-import axios from 'axios'
+import axios from 'axios';
 
 const API = axios.create({
-  baseURL: '/api/v1'
-})
+  baseURL: '/api/v1',
+});
 
-export const getTrialBalance  = ()     => API.get('/trial-balance')
-export const getBalanceSheet  = ()     => API.get('/balance-sheet')
-export const getAccountLedger = (code) => API.get(`/accounts/${code}/ledger`)
-export const postTransaction  = (data) => API.post('/transactions', data)
-export const postAccount  = (data) => API.post('/accounts', data)
+export const getTrialBalance = () => API.get('/trial-balance');
+export const getBalanceSheet = () => API.get('/balance-sheet');
+export const getIncomeStatement = () => API.get('/income-statement');
+export const getAccounts = () => API.get('/accounts');
+export const getAccountLedger = (code) => API.get(`/accounts/${code}/ledger`);
+export const getTransactions = () => API.get('/transactions');
+export const postTransaction = (data) => API.post('/transactions', data);
+export const postAccount = (data) => API.post('/accounts', data);

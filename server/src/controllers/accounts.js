@@ -56,6 +56,41 @@ exports.getAccount = async (req, res) => {
   }
 };
 
+exports.getLedgerInfo = async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    const result = await pool.query(
+      `SELECT
+        t.id,
+        t.date,
+        t.description,
+        CASE WHEN t.account_code_debit = $1 THEN t.amount ELSE 0 END AS debit,
+        CASE WHEN t.account_code_credit = $1 THEN t.amount ELSE 0 END AS credit,
+        t.account_code_debit,
+        t.account_code_credit
+      FROM transactions t
+      WHERE t.account_code_debit = $1 OR t.account_code_credit = $1
+      ORDER BY t.date ASC, t.id ASC`,
+      [code],
+    );
+
+    const data = result.rows.map((row) => ({
+      ...row,
+      debit: parseFloat(row.debit),
+      credit: parseFloat(row.credit),
+    }));
+
+    res.status(200).json({
+      status: 'success',
+      results: data.length,
+      data,
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
 exports.addAccount = async (req, res) => {
   const { code, name } = req.body;
 

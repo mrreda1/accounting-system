@@ -5,7 +5,13 @@
     "main": "index.js",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
-        "dev": "concurrently \"npm run dev --prefix client\" \"npm run dev --prefix server\""
+        "dev": "concurrently \"npm run dev --prefix client\" \"npm run dev --prefix server\"",
+        "compose:up": "docker compose up --build",
+        "compose:down": "docker compose down",
+        "compose:reset": "docker compose down -v && docker compose up --build",
+        "db:up": "docker compose up -d postgres",
+        "db:down": "docker compose down",
+        "db:reset": "docker compose down -v && docker compose up -d postgres"
     },
     "repository": {
         "type": "git",
