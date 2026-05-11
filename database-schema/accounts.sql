@@ -5,5 +5,6 @@ CREATE TABLE accounts (
   opening_credit NUMERIC(15,2) DEFAULT 0,
   opening_debit NUMERIC(15,2) DEFAULT 0,
   type  VARCHAR(40) NOT NULL CHECK (type IN ('asset', 'liability and equity', 'expense', 'revenue')),
+  is_active BOOLEAN DEFAULT TRUE,
   parent_code VARCHAR(10) REFERENCES accounts(code)
 );

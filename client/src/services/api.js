@@ -12,3 +12,6 @@ export const getAccountLedger = (code) => API.get(`/accounts/${code}/ledger`);
 export const getTransactions = () => API.get('/transactions');
 export const postTransaction = (data) => API.post('/transactions', data);
 export const postAccount = (data) => API.post('/accounts', data);
+export const patchAccountStatus = (code, data) =>
+  API.patch(`/accounts/${code}/status`, data);
+export const deleteTransaction = (id) => API.delete(`/transactions/${id}`);

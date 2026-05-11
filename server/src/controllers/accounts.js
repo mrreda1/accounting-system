@@ -154,6 +154,69 @@ exports.addAccount = async (req, res) => {
   }
 };
 
+exports.updateAccountStatus = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { is_active, active } = req.body || {};
+
+    const nextStatus =
+      typeof is_active === 'boolean'
+        ? is_active
+        : typeof active === 'boolean'
+          ? active
+          : null;
+
+    if (nextStatus === null) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'is_active must be a boolean',
+      });
+    }
+
+    if (nextStatus === false) {
+      const activeDescendants = await pool.query(
+        `WITH RECURSIVE descendants AS (
+          SELECT code, is_active
+          FROM accounts
+          WHERE parent_code = $1
+          UNION ALL
+          SELECT a.code, a.is_active
+          FROM accounts a
+          JOIN descendants d ON a.parent_code = d.code
+        )
+        SELECT 1 FROM descendants WHERE is_active = TRUE LIMIT 1`,
+        [code],
+      );
+
+      if (activeDescendants.rows.length > 0) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Deactivate only when all child accounts are inactive',
+        });
+      }
+    }
+
+    const result = await pool.query(
+      'UPDATE accounts SET is_active = $1 WHERE code = $2 RETURNING *',
+      [nextStatus, code],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        status: 'fail',
+        message: `Account with code ${code} not found`,
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: result.rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+};
+
 function inferType(code) {
   const prefix = String(code)[0];
   const map = {

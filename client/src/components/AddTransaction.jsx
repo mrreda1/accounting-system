@@ -5,14 +5,16 @@ import { getNormalSide, inferTypeFromCode } from '../utils/accounting';
 function AddTransaction({ accounts = [], prefilledAccount, onClose, onSuccess }) {
   const classifiedAccounts = useMemo(
     () =>
-      accounts.map((account) => {
+      accounts
+        .filter((account) => account.is_active !== false)
+        .map((account) => {
         const resolvedType = account.type || inferTypeFromCode(account.code);
         return {
           ...account,
           resolvedType,
           normalSide: getNormalSide(resolvedType),
         };
-      }),
+        }),
     [accounts],
   );
 

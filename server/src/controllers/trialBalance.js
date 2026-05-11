@@ -3,7 +3,7 @@ const pool = require('../config/db');
 exports.getTrialBalance = async (req, res) => {
   try {
     const accountsResult = await pool.query(`
-      SELECT code, name, type, parent_code, opening_debit, opening_credit
+      SELECT code, name, type, parent_code, opening_debit, opening_credit, is_active
       FROM accounts
       ORDER BY code
     `);
@@ -60,6 +60,7 @@ exports.getTrialBalance = async (req, res) => {
         name: account.name,
         type: account.type,
         parent_code: account.parent_code,
+        is_active: account.is_active,
         opening_debit,
         opening_credit,
         movement_debit,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  deleteTransaction,
   getTransactions,
   getTrialBalance,
 } from '../services/api';
@@ -17,6 +18,7 @@ function TransactionsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   async function loadData() {
     try {
@@ -70,6 +72,23 @@ function TransactionsTab() {
     });
   }, [transactions]);
 
+  async function handleDeleteTransaction(transaction) {
+    if (!transaction?.id) return;
+
+    const confirmed = window.confirm('Delete this transaction? This cannot be undone.');
+    if (!confirmed) return;
+
+    setDeletingId(transaction.id);
+    try {
+      await deleteTransaction(transaction.id);
+      await loadData();
+    } catch (err) {
+      setError(err.response?.data?.message || err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -121,12 +140,13 @@ function TransactionsTab() {
                 <th className="px-4 py-3">Cost Centre</th>
                 <th className="px-4 py-3">Numerical</th>
                 <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                     No transactions found.
                   </td>
                 </tr>
@@ -172,6 +192,16 @@ function TransactionsTab() {
                     <td className="px-4 py-3 text-slate-600">{transaction.cost_centre || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{transaction.numerical || '-'}</td>
                     <td className="px-4 py-3 text-slate-600">{transaction.description || '-'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTransaction(transaction)}
+                        disabled={deletingId === transaction.id}
+                        className="rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingId === transaction.id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

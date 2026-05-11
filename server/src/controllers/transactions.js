@@ -80,11 +80,11 @@ exports.addTransaction = async (req, res) => {
 
   try {
     const debitAccount = await pool.query(
-      `SELECT code FROM accounts WHERE code = $1`,
+      `SELECT code, is_active FROM accounts WHERE code = $1`,
       [account_code_debit],
     );
     const creditAccount = await pool.query(
-      `SELECT code FROM accounts WHERE code = $1`,
+      `SELECT code, is_active FROM accounts WHERE code = $1`,
       [account_code_credit],
     );
 
@@ -99,6 +99,20 @@ exports.addTransaction = async (req, res) => {
       return res.status(400).json({
         status: 'fail',
         message: `Credit account ${account_code_credit} does not exist`,
+      });
+    }
+
+    if (!debitAccount.rows[0].is_active) {
+      return res.status(400).json({
+        status: 'fail',
+        message: `Debit account ${account_code_debit} is inactive`,
+      });
+    }
+
+    if (!creditAccount.rows[0].is_active) {
+      return res.status(400).json({
+        status: 'fail',
+        message: `Credit account ${account_code_credit} is inactive`,
       });
     }
 
@@ -121,6 +135,42 @@ exports.addTransaction = async (req, res) => {
     res.status(201).json({
       status: 'success',
       data: result.rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      message: err.message,
+    });
+  }
+};
+
+exports.deleteTransaction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parsedId = Number.parseInt(id, 10);
+
+    if (Number.isNaN(parsedId)) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Transaction id must be a number',
+      });
+    }
+
+    const result = await pool.query(
+      'DELETE FROM transactions WHERE id = $1 RETURNING id',
+      [parsedId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        status: 'fail',
+        message: `Transaction ${parsedId} not found`,
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: { id: result.rows[0].id },
     });
   } catch (err) {
     res.status(500).json({

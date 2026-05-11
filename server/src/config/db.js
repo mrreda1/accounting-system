@@ -43,6 +43,7 @@ async function initializeDatabase() {
       opening_credit NUMERIC(15, 2) DEFAULT 0,
       opening_debit NUMERIC(15, 2) DEFAULT 0,
       type VARCHAR(40) NOT NULL CHECK (type IN ('asset', 'liability and equity', 'expense', 'revenue')),
+      is_active BOOLEAN DEFAULT TRUE,
       parent_code VARCHAR(10) REFERENCES accounts(code)
     )
   `);
@@ -79,6 +80,10 @@ async function initializeDatabase() {
   await pool.query(
     'ALTER TABLE accounts ADD COLUMN IF NOT EXISTS parent_code VARCHAR(10)',
   );
+  await pool.query(
+    'ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE',
+  );
+  await pool.query('UPDATE accounts SET is_active = TRUE WHERE is_active IS NULL');
 
   await pool.query(`
     DO $$

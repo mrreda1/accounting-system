@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getTrialBalance, postAccount } from '../services/api';
+import { getTrialBalance, patchAccountStatus, postAccount } from '../services/api';
 import {
   compareCode,
   flattenAccountTree,
@@ -14,6 +14,7 @@ function AccountsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [updatingCodes, setUpdatingCodes] = useState(() => new Set());
   const [form, setForm] = useState({ code: '', name: '' });
 
   async function loadAccounts() {
@@ -68,6 +69,36 @@ function AccountsTab() {
       setError(err.response?.data?.message || err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleToggleStatus(account) {
+    const hasActiveChildren = hasActiveDescendant(account);
+    const isActive = account.is_active !== false;
+
+    if (isActive && hasActiveChildren) {
+      setError('Deactivate only when all child accounts are inactive.');
+      return;
+    }
+
+    setUpdatingCodes((prev) => {
+      const next = new Set(prev);
+      next.add(account.code);
+      return next;
+    });
+
+    try {
+      await patchAccountStatus(account.code, { is_active: !isActive });
+      await loadAccounts();
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message);
+    } finally {
+      setUpdatingCodes((prev) => {
+        const next = new Set(prev);
+        next.delete(account.code);
+        return next;
+      });
     }
   }
 
@@ -127,6 +158,8 @@ function AccountsTab() {
             subtitle="Normal balance side: Debit"
             accounts={assets}
             accent="teal"
+            onToggleStatus={handleToggleStatus}
+            updatingCodes={updatingCodes}
           />
 
           <AccountLayerTree
@@ -134,6 +167,8 @@ function AccountsTab() {
             subtitle="Normal balance side: Credit"
             accounts={liabilitiesAndEquity}
             accent="amber"
+            onToggleStatus={handleToggleStatus}
+            updatingCodes={updatingCodes}
           />
 
           <div className="xl:col-span-2">
@@ -142,6 +177,8 @@ function AccountsTab() {
               subtitle="Revenue and expense accounts used in net income"
               accounts={otherAccounts}
               accent="slate"
+              onToggleStatus={handleToggleStatus}
+              updatingCodes={updatingCodes}
             />
           </div>
         </div>
@@ -155,6 +192,8 @@ function AccountLayerTree({
   subtitle,
   accounts,
   accent,
+  onToggleStatus,
+  updatingCodes,
 }) {
   const accentMap = {
     teal: 'from-teal-500/15 to-cyan-500/10 border-teal-200',
@@ -190,8 +229,10 @@ function AccountLayerTree({
       depth: 0,
       expandedCodes,
       onToggle: toggleNode,
+      onToggleStatus,
+      updatingCodes,
     });
-  }, [roots, expandedCodes]);
+  }, [roots, expandedCodes, onToggleStatus, updatingCodes]);
 
   return (
     <div className={`rounded-3xl border bg-gradient-to-br p-5 shadow-sm ${accentMap[accent]}`}>
@@ -222,6 +263,7 @@ function AccountLayerTree({
             <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3">ID</th>
               <th className="px-4 py-3">Account</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Layer</th>
               <th className="px-4 py-3">Side</th>
               <th className="px-4 py-3 text-right">Balance</th>
@@ -230,7 +272,7 @@ function AccountLayerTree({
           <tbody>
             {accounts.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-5 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-5 text-center text-slate-400">
                   No accounts in this group yet.
                 </td>
               </tr>
@@ -249,19 +291,30 @@ function renderTreeRows({
   depth,
   expandedCodes,
   onToggle,
+  onToggleStatus,
+  updatingCodes,
 }) {
   const rows = [];
 
   nodes.forEach((account) => {
     const hasChildren = account.children.length > 0;
     const isExpanded = expandedCodes.has(account.code);
+    const isActive = account.is_active !== false;
+    const isUpdating = updatingCodes?.has(account.code);
+    const hasActiveChildren = hasActiveDescendant(account);
+    const disableDeactivate = isActive && hasActiveChildren;
     const balance =
       account.type === 'asset' || account.type === 'expense'
         ? Number(account.total_debit) - Number(account.total_credit)
         : Number(account.total_credit) - Number(account.total_debit);
 
     rows.push(
-      <tr key={account.code} className="border-b border-slate-100 text-slate-700 hover:bg-slate-50/70">
+      <tr
+        key={account.code}
+        className={`border-b border-slate-100 text-slate-700 hover:bg-slate-50/70 ${
+          isActive ? '' : 'bg-slate-50/60 text-slate-400'
+        }`}
+      >
         <td className="px-4 py-3 font-mono text-xs text-slate-500">{account.code}</td>
         <td className="px-4 py-3 font-medium text-slate-800">
           <div className="flex items-center gap-2" style={{ paddingInlineStart: `${depth * 1.2}rem` }}>
@@ -281,6 +334,27 @@ function renderTreeRows({
             <span dir="auto" className="leading-6">{account.name}</span>
           </div>
         </td>
+        <td className="px-4 py-3">
+          <button
+            type="button"
+            onClick={() => onToggleStatus?.(account)}
+            disabled={isUpdating || disableDeactivate}
+            title={
+              disableDeactivate
+                ? 'Deactivate only when all child accounts are inactive'
+                : isActive
+                  ? 'Deactivate account'
+                  : 'Activate account'
+            }
+            className={`rounded-lg border px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              isActive
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-400'
+                : 'border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-400'
+            }`}
+          >
+            {isUpdating ? 'Updating...' : isActive ? 'Active' : 'Inactive'}
+          </button>
+        </td>
         <td className="px-4 py-3">Layer {getAccountLayer(account.code)}</td>
         <td className="px-4 py-3">{getNormalSide(account.type)}</td>
         <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatMoney(balance)}</td>
@@ -294,12 +368,23 @@ function renderTreeRows({
           depth: depth + 1,
           expandedCodes,
           onToggle,
+          onToggleStatus,
+          updatingCodes,
         }),
       );
     }
   });
 
   return rows;
+}
+
+function hasActiveDescendant(node) {
+  if (!node?.children || node.children.length === 0) return false;
+
+  return node.children.some((child) => {
+    const childActive = child.is_active !== false;
+    return childActive || hasActiveDescendant(child);
+  });
 }
 
 function buildAccountTree(accounts) {
